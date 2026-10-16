@@ -1,3 +1,5 @@
 nfpl.db
 __pycache__/
 .venv/
+.pytest_cache/
+.pytest_cache/

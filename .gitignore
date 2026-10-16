@@ -3,3 +3,5 @@ __pycache__/
 .venv/
 .pytest_cache/
 .pytest_cache/
+scale.db
+scale.db

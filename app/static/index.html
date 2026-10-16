@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NFPL Access Control</title>
+<style>
+:root{--bg:#f5f6f8;--card:#fff;--ink:#1b2430;--mute:#5c6a7a;--line:#dde2e8;--brand:#1c3d6e;--ok:#166534;--okbg:#dcfce7;--no:#991b1b;--nobg:#fee2e2}
+@media (prefers-color-scheme:dark){:root{--bg:#0f141b;--card:#18202b;--ink:#e6ebf1;--mute:#93a1b3;--line:#2a3544;--brand:#7ea6e0;--ok:#86efac;--okbg:#14351f;--no:#fca5a5;--nobg:#3a1717}}
+*{box-sizing:border-box}body{margin:0;font:14px/1.45 system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+header{background:var(--card);border-bottom:1px solid var(--line);padding:12px 20px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+header h1{font-size:17px;margin:0;color:var(--brand)}header .sp{flex:1}
+main{max-width:1100px;margin:16px auto;padding:0 16px;display:grid;gap:16px;grid-template-columns:1fr 1fr}
+@media(max-width:800px){main{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px}
+.card.wide{grid-column:1/-1}h2{font-size:14px;margin:0 0 10px;color:var(--brand)}
+select,input,button{font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink)}
+button{cursor:pointer;background:var(--brand);color:#fff;border-color:var(--brand)}button.alt{background:var(--card);color:var(--ink);border-color:var(--line)}
+button:disabled{opacity:.4;cursor:not-allowed}
+table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:5px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--mute);font-weight:600}tr.job{cursor:pointer}tr.job:hover{background:var(--bg)}
+.pill{display:inline-block;padding:1px 8px;border-radius:99px;font-size:12px;font-weight:600}
+.ok{background:var(--okbg);color:var(--ok)}.no{background:var(--nobg);color:var(--no)}
+.mute{color:var(--mute)}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:6px 0}
+.box{border:1px solid var(--line);border-radius:8px;padding:10px;margin-top:8px}.chk{font-size:12px;margin:2px 0}
+.scroll{max-height:300px;overflow:auto}ul{margin:4px 0;padding-left:18px}
+</style></head><body>
+<header><h1>NFPL Access Control</h1><span class="mute">Acting as</span><select id="me"></select>
+<span class="sp"></span><span class="mute">Date: <b id="today"></b></span></header>
+<main>
+<section class="card"><h2>This person's access (plain terms)</h2><div id="access" class="scroll"></div></section>
+<section class="card"><h2>Jobs waiting for me <span id="wcount" class="pill ok"></span></h2><div id="waiting" class="scroll"></div></section>
+<section class="card wide"><h2>Job</h2>
+ <div class="row"><input id="ref" placeholder="Job ref, e.g. DEMO-NARROW-NO" size="28"><button id="load" class="alt">Open</button></div>
+ <div id="job" class="mute">Pick a job from the waiting list or type a reference.</div></section>
+<section class="card wide"><h2>Why can she do this and he can't?</h2>
+ <div class="row"><select id="ua"></select><span class="mute">vs</span><select id="ub"></select>
+ <select id="act"><option>prepare</option><option selected>check</option><option>file</option><option>cancel</option><option>reopen</option><option>view</option></select>
+ <span class="mute">on the open job</span><button id="why">Explain</button></div><div id="whyout"></div></section>
+<section class="card wide"><h2>History &amp; who could have changed it</h2>
+ <div class="row"><span class="mute">Who could have changed the open job on</span><input id="when" type="date"><button id="whobtn" class="alt">Show</button></div>
+ <div id="who"></div><div id="hist" class="scroll"></div></section>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let me="",job=null,users={};
+async function api(path,opts={}){const r=await fetch("/api"+path,{headers:{"Content-Type":"application/json",...(opts.user?{"X-User":opts.user}:{})},
+  method:opts.body?"POST":"GET",body:opts.body?JSON.stringify(opts.body):undefined});return {status:r.status,data:await r.json()}}
+const pill=ok=>`<span class="pill ${ok?"ok":"no"}">${ok?"ALLOWED":"DENIED"}</span>`;
+const scope=g=>[g.client_id?"client "+g.client_id:"all clients",g.branch_id?"branch "+g.branch_id:"all branches",
+  g.direction?g.direction+"s only":"both directions",g.mode?g.mode.toUpperCase()+" only":"all modes"].join(", ");
+
+async function init(){
+  const [meta,u]=await Promise.all([api("/meta"),api("/users")]);
+  $("today").textContent=meta.data.today;$("when").value=meta.data.today;
+  u.data.forEach(x=>users[x.id]=x);
+  const opts=u.data.map(x=>`<option value="${esc(x.id)}">${esc(x.name)}</option>`).join("");
+  ["me","ua","ub"].forEach(i=>$(i).innerHTML=opts);
+  $("me").value="ravi";$("ua").value="neha";$("ub").value="rohit";
+  $("me").onchange=()=>setMe($("me").value);setMe("ravi");
+}
+async function setMe(id){me=id;const u=users[id];
+  const a=(await api(`/users/${id}/access`)).data;
+  let h=`<b>${esc(u.name)}</b> <span class="mute">(${esc(u.kind)})</span>`;
+  if(u.absent_from)h+=`<div><span class="pill no">absent ${esc(u.absent_from)} to ${esc(u.absent_until)}</span></div>`;
+  h+="<ul>";
+  if(!a.grants.length)h+="<li>No grants: can do nothing (deny by default).</li>";
+  a.grants.forEach(g=>{h+=`<li>Role <b>${esc(g.role)}</b> for ${esc(scope(g))} <span class="mute">(since ${esc(g.valid_from)}${g.valid_to?", ended "+esc(g.valid_to):""})</span></li>`});
+  a.delegations.forEach(d=>{h+=`<li>Delegation: ${esc(d.to_user)} covers jobs owned by ${esc(d.from_user)} until ${esc(d.valid_to)}</li>`});
+  $("access").innerHTML=h+"</ul>";loadWaiting()}
+async function loadWaiting(){const w=(await api(`/waiting?user=${me}&limit=100`)).data;
+  $("wcount").textContent=w.count;
+  $("waiting").innerHTML=w.count?`<table><tr><th>Ref</th><th>Client</th><th>Br.</th><th>Dir/Mode</th><th>Next</th></tr>`+
+   w.jobs.map(j=>`<tr class="job" data-id="${j.id}"><td>${esc(j.ref)}</td><td>${esc(j.client_id)}</td><td>${esc(j.branch_id)}</td><td>${esc(j.direction)}/${esc(j.mode)}</td><td>${esc(j.waiting_for)}</td></tr>`).join("")+"</table>"
+   +(w.count>100?`<div class="mute">Showing 100 of ${w.count}</div>`:""):'<span class="mute">Nothing waiting.</span>';
+  document.querySelectorAll("tr.job").forEach(r=>r.onclick=()=>openJob(r.dataset.id))}
+async function openJob(id){const r=await api("/jobs/"+id);if(r.status!=200){$("job").textContent="Job not found.";return}
+  job=r.data;$("ref").value=job.ref;
+  const acts=["prepare","check","file","cancel","reopen"];
+  $("job").innerHTML=`<div><b>${esc(job.ref)}</b> <span class="pill ok">${esc(job.stage)}</span> client ${esc(job.client_id)}, branch ${esc(job.branch_id)}, ${esc(job.direction)}, ${esc(job.mode)}
+   <div class="mute">owner: ${esc(job.owner_id||"-")} &middot; prepared by: ${esc(job.prepared_by||"-")} &middot; checked by: ${esc(job.checked_by||"-")}</div></div>
+   <div class="row"><input id="reason" placeholder="Reason (needed to cancel a filed job / reopen)" size="44">`+
+   acts.map(a=>`<button class="alt" data-a="${a}">${a}</button>`).join("")+`</div><div id="actout"></div>`;
+  document.querySelectorAll("[data-a]").forEach(b=>b.onclick=()=>doAction(b.dataset.a));
+  loadHist();showWho()}
+async function doAction(a){const r=await api(`/jobs/${job.id}/actions/${a}`,{user:me,body:{reason:$("reason").value}});
+  $("actout").innerHTML=`<div class="box">${pill(r.data.allowed)} <b>${esc(users[me].name)}</b> &rarr; ${esc(a)}<div>${esc(r.data.reason)}</div></div>`;
+  if(r.data.allowed){const j=(await api("/jobs/"+job.id)).data;job=j;loadWaiting();loadHist();
+    $("job").querySelector(".pill").textContent=j.stage}}
+async function loadHist(){const h=(await api(`/jobs/${job.id}/history`)).data;
+  $("hist").innerHTML=h.length?`<table><tr><th>Time</th><th>Who</th><th>What</th><th>Result</th><th>Why</th></tr>`+
+   h.map(e=>`<tr><td>${esc(e.ts.replace("T"," "))}</td><td>${esc(e.actor)}</td><td>${esc(e.event==="job_action"?"DONE: ":"asked: ")+esc(e.action||"")}</td><td>${e.allowed==null?"":pill(e.allowed)}</td><td>${esc(e.reason||"")}</td></tr>`).join("")+"</table>"
+   :'<div class="mute">No history recorded for this job yet. Try an action above.</div>'}
+async function showWho(){if(!job)return;const w=(await api(`/jobs/${job.id}/who-could-change?date=${$("when").value}`)).data;
+  $("who").innerHTML=`<div class="box"><b>Held authority to change ${esc(w.job)} on ${esc(w.date)}:</b><ul>`+
+   w.people.map(p=>`<li>${esc(p.name)} <span class="mute">${esc(p.actions.join(", "))} &middot; via ${esc(p.via)}${p.grant_ids.length?" (grant #"+p.grant_ids.join(", #")+")":""}</span></li>`).join("")+"</ul></div>"}
+$("whobtn").onclick=showWho;
+$("load").onclick=async()=>{const r=await api("/jobs?ref="+encodeURIComponent($("ref").value.trim()));
+  if(r.data.length)openJob(r.data[0].id);else $("job").textContent="No job with that reference."};
+$("why").onclick=async()=>{if(!job){$("whyout").innerHTML='<span class="mute">Open a job first.</span>';return}
+  const d=(await api(`/explain?a=${$("ua").value}&b=${$("ub").value}&action=${$("act").value}&job=${job.id}`)).data;
+  const col=x=>`<div class="box"><b>${esc(users[x.user].name)}</b> ${pill(x.allowed)}<div>${esc(x.reason)}</div>`+
+    x.checks.map(c=>`<div class="chk">${c.ok?"&#10003;":"&#10007;"} ${esc(c.check)}: ${esc(c.detail)}</div>`).join("")+"</div>";
+  $("whyout").innerHTML=`<div class="mute" style="margin-top:6px">${esc($("act").value)} on ${esc(job.ref)}</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${col(d.a)}${col(d.b)}</div>`};
+init();
+</script></body></html>

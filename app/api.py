@@ -33,7 +33,12 @@ class Handler(BaseHTTPRequestHandler):
                      ("Access-Control-Allow-Methods", "GET, POST, OPTIONS")): self.send_header(k, v)
         self.end_headers()
 
-    def do_GET(self): self._route("GET")
+    def do_GET(self):
+        if urlparse(self.path).path in ("/", "/index.html"):
+            data = open(os.path.join(os.path.dirname(__file__), "static", "index.html"), "rb").read()
+            self.send_response(200); self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(data))); self.end_headers(); self.wfile.write(data); return
+        self._route("GET")
     def do_POST(self): self._route("POST")
 
     def _route(self, method):
@@ -49,9 +54,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def dispatch(self, con, m, p, q):
         today = q.get("today") or _today(); who = self.headers.get("X-User") or q.get("user")
-        if m == "GET" and p in ("/", "/api"):
+        if m == "GET" and p == "/api":
             return 200, {"service": "NFPL access control", "endpoints": [
-                "GET  /api/users", "GET  /api/users/{id}/access", "GET  /api/jobs?limit=&offset=",
+                "GET  /api/meta", "GET  /api/users", "GET  /api/users/{id}/access", "GET  /api/jobs?limit=&offset=&ref=", "GET  /api/jobs/{id}",
                 "GET  /api/can?user=&action=&job=&reason=", "GET  /api/explain?a=&b=&action=&job=",
                 "GET  /api/waiting?user=", "GET  /api/jobs/{id}/history?decisions=0|1",
                 "GET  /api/jobs/{id}/who-could-change?date=YYYY-MM-DD",
@@ -59,6 +64,13 @@ class Handler(BaseHTTPRequestHandler):
                 "POST /api/grants   (X-User=admin; body {user, role, client, branch, direction, mode, reason})",
                 "POST /api/grants/{id}/revoke   (X-User=admin; body {reason})",
                 "GET  /api/audit?limit="]}
+        if m == "GET" and p == "/api/meta":
+            return 200, {"today": engine._today(today),
+                         "clients": [dict(r) for r in con.execute("SELECT * FROM clients")],
+                         "branches": [dict(r) for r in con.execute("SELECT * FROM branches")]}
+        if m == "GET" and (g := re.fullmatch(r"/api/jobs/(\d+)", p)):
+            r = con.execute("SELECT * FROM jobs WHERE id=?", (int(g[1]),)).fetchone()
+            return (200, dict(r)) if r else (404, {"error": "no such job"})
         if m == "GET" and p == "/api/users":
             return 200, [dict(r) for r in con.execute("SELECT id,name,kind,status,absent_from,absent_until FROM users")]
         if m == "GET" and (g := re.fullmatch(r"/api/users/(\w+)/access", p)):
@@ -69,6 +81,8 @@ class Handler(BaseHTTPRequestHandler):
                              "SELECT * FROM delegations WHERE to_user=? OR from_user=?", (g[1], g[1]))]}
         if m == "GET" and p == "/api/jobs":
             lim, off = min(int(q.get("limit", 50)), 200), int(q.get("offset", 0))
+            if q.get("ref"):
+                return 200, [dict(r) for r in con.execute("SELECT * FROM jobs WHERE ref LIKE ? LIMIT 20", (q["ref"] + "%",))]
             return 200, [dict(r) for r in con.execute("SELECT * FROM jobs ORDER BY id LIMIT ? OFFSET ?", (lim, off))]
         if m == "GET" and p == "/api/can":
             if not q.get("user") or not q.get("action"): return 400, {"error": "user and action required"}

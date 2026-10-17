@@ -5,3 +5,5 @@ __pycache__/
 .pytest_cache/
 scale.db
 scale.db
+.DS_Store
+scale.db

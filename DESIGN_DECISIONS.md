@@ -30,7 +30,7 @@ Read these. In the follow-up call, every one of them is a "why did you choose th
 | 2 | Scope columns on grants (see Core model). |
 | 3 | Maker may not check own preparation. Hard rule, no override in v1. Lata is the test case. |
 | 4 | Absence is a date range. A delegation lets a named cover person act on the absent owner's jobs, only with roles they already hold. Expires by itself. |
-| 5 | Narrowing a grant does not strand jobs: the job stays visible to its owner as "needs reassignment"; actions already stamped stay valid. Karan is the test case. |
+| 5 | Narrowing a grant takes effect immediately: the job leaves that person's waiting list, work already stamped on the job stays valid, and anyone else holding the role picks it up. No special 'needs reassignment' view in v1 (cut). Karan is the test case. |
 | 6 | Only `controller`. Filed jobs additionally need a written reason. Every use is audited. |
 | 7 | `client_viewer` role, client_id mandatory, view only. |
 | 8 | Admin manages grants but has no job-action roles. Admin cannot grant or widen their own access. Fixing a stuck job goes through a controller with a reason. |

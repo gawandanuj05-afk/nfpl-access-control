@@ -3,7 +3,7 @@
 Decides **who may do what on which job**, explains every answer, and keeps a history that answers
 "who could have changed this job on the 3rd?". Built for the Nagarkot take-home assignment.
 
-- **Live demo:** _add your hosted link here_
+- **Live demo:** https://nfpl-access-control.onrender.com (free tier: the first load after idle can take ~50 s)
 - **Design document:** [DESIGN.md](DESIGN.md)  |  **Decision log:** [DESIGN_DECISIONS.md](DESIGN_DECISIONS.md)
 
 No dependencies: Python 3.10+ standard library only (SQLite included). `pytest` is needed only to run tests.
